@@ -1,0 +1,99 @@
+services:
+  redis:
+    image: redis:alpine
+    container_name: pm-redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+  mongodb:
+    image: mongo:latest
+    container_name: pm-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - "mongo_data:/data/db"
+    restart: always
+
+  scraper:
+    build:
+      context: .
+      dockerfile: ./services/scraper/Dockerfile
+    container_name: pm-scraper
+    depends_on:
+      - redis
+      - mongodb
+    env_file: .env
+    environment:
+      - TZ=Asia/Taipei
+      - RUNNING_IN_DOCKER=true
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"   # 每個日誌檔案最大 10MB
+        max-file: "3"
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.base # 可以共用一個基礎 Go Dockerfile
+    command: ["/app/bin/scheduler"] # 執行編譯出來的 scheduler 二進位檔
+    environment:
+      - TZ=Asia/Taipei
+      - REDIS_ADDR=redis:6379
+    depends_on:
+      - redis
+    env_file: .env
+    restart: always # ˋ暫時自動重啟，未來可能會因應修改觸發方式調整
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"   # 每個日誌檔案最大 10MB
+        max-file: "3"
+
+  storage:
+    build:
+      context: .
+      dockerfile: Dockerfile.base # 一樣共用基礎 Go Dockerfile 即可
+    command: [ "/app/bin/storage" ]
+    environment:
+      - TZ=Asia/Taipei
+      - REDIS_ADDR=redis:6379
+    depends_on:
+      - redis
+      - mongodb
+    env_file: .env
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"   # 每個日誌檔案最大 10MB
+        max-file: "3"
+
+  notifier:
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+    container_name: product-monitor-notifier
+    command: [ "/app/bin/notifier" ]
+    env_file:
+      - .env
+    environment:
+      - TZ=Asia/Taipei
+      - REDIS_ADDR=redis:6379
+    depends_on:
+      - redis
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"   # 每個日誌檔案最大 10MB
+        max-file: "3"
+
+volumes:
+  mongo_data:

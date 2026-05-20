@@ -1,0 +1,22 @@
+# Environment files (secrets)
+.env
+.env.*
+!.env.example
+
+# Build outputs
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go build / test artifacts
+*.test
+*.out
+coverage/
+cover.out
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
