@@ -2,14 +2,18 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"product-monitor/shared/config"
 	"product-monitor/shared/logging"
+	"product-monitor/shared/models"
+	"product-monitor/shared/sheets"
 	"product-monitor/shared/store"
 )
 
@@ -45,7 +49,13 @@ func main() {
 }
 
 func dispatch(ctx context.Context, rdb *store.RedisStore, cfg *config.Config) {
-	keywords := cfg.Keywords
+	tasks, err := loadSearchTasks(ctx, cfg)
+	if err != nil {
+		slog.Error("[Scheduler] 無法取得搜尋任務清單",
+			"err_msg", err,
+		)
+		return
+	}
 
 	queueLen, inflight, busy, err := rdb.ScrapeRoundStatus(ctx)
 	if err != nil {
@@ -67,25 +77,60 @@ func dispatch(ctx context.Context, rdb *store.RedisStore, cfg *config.Config) {
 		return
 	}
 
-	if len(keywords) == 0 {
-		slog.Warn("[Scheduler] 未設定 KEYWORDS，略過派發")
+	if len(tasks) == 0 {
+		slog.Warn("[Scheduler] 搜尋任務清單為空，略過派發")
 		return
 	}
 
-	slog.Info("[Scheduler] 定時觸發，正在向 Redis 隊列派發關鍵字",
-		"keyword_count", len(keywords),
-		"keywords", keywords,
+	slog.Info("[Scheduler] 定時觸發，正在向 Redis 隊列派發搜尋任務",
+		"source", taskSource(cfg),
+		"task_count", len(tasks),
 	)
-	for _, kw := range keywords {
-		err := rdb.PushTask(ctx, kw)
+	for _, task := range tasks {
+		err := rdb.PushTask(ctx, task)
 		if err != nil {
-			slog.Warn("[Scheduler] 派發關鍵字失敗",
-				"keyword", kw,
+			slog.Warn("[Scheduler] 派發任務失敗",
+				"keyword", task.Keyword,
+				"price_start", task.PriceStart,
+				"price_end", task.PriceEnd,
 				"err_msg", err,
 			)
 		}
 	}
-	slog.Info("[Scheduler] 本輪關鍵字派發完畢")
+	slog.Info("[Scheduler] 本輪搜尋任務派發完畢")
+}
+
+func loadSearchTasks(ctx context.Context, cfg *config.Config) ([]models.SearchTask, error) {
+	csvURL := cfg.GoogleSheetExportURL()
+	if csvURL != "" {
+		return sheets.FetchSearchTasks(ctx, csvURL)
+	}
+	if len(cfg.Keywords) > 0 {
+		slog.Warn("[Scheduler] 未設定 Google 試算表，使用環境變數 KEYWORDS 後備（價格 0–95000）")
+		tasks := make([]models.SearchTask, 0, len(cfg.Keywords))
+		for _, kw := range cfg.Keywords {
+			kw = strings.TrimSpace(kw)
+			if kw == "" {
+				continue
+			}
+			tasks = append(tasks, models.SearchTask{
+				Keyword:    kw,
+				PriceStart: 0,
+				PriceEnd:   95000,
+			})
+		}
+		if len(tasks) > 0 {
+			return tasks, nil
+		}
+	}
+	return nil, fmt.Errorf("請設定 GOOGLE_SHEET_CSV_URL 或 GOOGLE_SHEETS_ID（或後備 KEYWORDS）")
+}
+
+func taskSource(cfg *config.Config) string {
+	if cfg.GoogleSheetExportURL() != "" {
+		return "google_sheet_csv"
+	}
+	return "env_keywords"
 }
 
 func cancelHandle(cancel context.CancelFunc) {

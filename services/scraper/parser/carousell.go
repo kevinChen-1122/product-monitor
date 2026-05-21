@@ -114,10 +114,11 @@ func ParseListings(page playwright.Page) ([]models.Product, error) {
 	return products, nil
 }
 
-// GetSearchURL 封裝搜尋網址的建構邏輯
-func GetSearchURL(query string) string {
+// GetSearchURL 封裝搜尋網址的建構邏輯（含 price_start / price_end）
+func GetSearchURL(query string, priceStart, priceEnd int) string {
+	segment := url.PathEscape(strings.TrimSpace(query))
 	return fmt.Sprintf(
-		"https://tw.carousell.com/search/%s?addRecent=true&canChangeKeyword=true&includeSuggestions=true&price_start=0&price_end=95000&sort_by=3&t-search_query_source=direct_search",
-		query,
+		"https://tw.carousell.com/search/%s?addRecent=true&canChangeKeyword=true&includeSuggestions=true&price_start=%d&price_end=%d&sort_by=3&t-search_query_source=direct_search",
+		segment, priceStart, priceEnd,
 	)
 }

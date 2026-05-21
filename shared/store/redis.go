@@ -3,8 +3,11 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"product-monitor/shared/models"
+	"fmt"
+	"strings"
 	"time"
+
+	"product-monitor/shared/models"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -28,18 +31,56 @@ func NewRedisStore(addr string) *RedisStore {
 	}
 }
 
-// PushTask 將關鍵字推入 List
-func (r *RedisStore) PushTask(ctx context.Context, kw string) error {
-	return r.Client.LPush(ctx, scraperTasksKey, kw).Err()
+const (
+	defaultTaskPriceStart = 0
+	defaultTaskPriceEnd   = 95000
+)
+
+// PushTask 將搜尋任務推入 List（JSON）
+func (r *RedisStore) PushTask(ctx context.Context, task models.SearchTask) error {
+	data, err := json.Marshal(task)
+	if err != nil {
+		return err
+	}
+	return r.Client.LPush(ctx, scraperTasksKey, data).Err()
 }
 
 // PopTask 從 List 領取任務 (阻塞)
-func (r *RedisStore) PopTask(ctx context.Context) (string, error) {
+func (r *RedisStore) PopTask(ctx context.Context) (models.SearchTask, error) {
 	res, err := r.Client.BRPop(ctx, 0, scraperTasksKey).Result()
 	if err != nil {
-		return "", err
+		return models.SearchTask{}, err
 	}
-	return res[1], nil
+	return decodeSearchTask(res[1])
+}
+
+func decodeSearchTask(payload string) (models.SearchTask, error) {
+	payload = strings.TrimSpace(payload)
+	if payload == "" {
+		return models.SearchTask{}, fmt.Errorf("任務 payload 為空")
+	}
+	if payload[0] == '{' {
+		var task models.SearchTask
+		if err := json.Unmarshal([]byte(payload), &task); err != nil {
+			return models.SearchTask{}, err
+		}
+		if task.Keyword == "" {
+			return models.SearchTask{}, fmt.Errorf("任務缺少 keyword")
+		}
+		if task.PriceEnd <= 0 {
+			task.PriceEnd = defaultTaskPriceEnd
+		}
+		if task.PriceStart < 0 {
+			task.PriceStart = defaultTaskPriceStart
+		}
+		return task, nil
+	}
+	// 相容舊版：隊列中僅存關鍵字字串
+	return models.SearchTask{
+		Keyword:    payload,
+		PriceStart: defaultTaskPriceStart,
+		PriceEnd:   defaultTaskPriceEnd,
+	}, nil
 }
 
 // ScrapeRoundStatus 回傳本輪是否仍在進行（隊列尚有任務或爬蟲正在處理某一關鍵字）

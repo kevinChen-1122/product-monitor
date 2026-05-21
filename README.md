@@ -5,6 +5,9 @@
 Scheduler（定時 SCRAPE_INTERVAL）
     │
     ▼
+從 Google 試算表 CSV 讀取關鍵字（每次派發前抓取，免 API 金鑰）
+    │
+    ▼
 上一輪完成？（scraper:tasks 為空 且 scraper:inflight 不存在）
     │
     ├── 是 ──▶ LPUSH 全部 KEYWORDS ──▶ Redis: scraper:tasks
@@ -89,7 +92,8 @@ product-monitor/
 |------|------|
 | `bin/` | `make build` 產出的二進位檔（可忽略版控） |
 | `cmd/notifier/` | 從 Redis List `queue:notifier` 領取商品，批次打包後以 **webhook 輪詢池** 推送 Discord |
-| `cmd/scheduler/` | 依 `SCRAPE_INTERVAL` 定時將 `KEYWORDS` 推入 Redis 任務隊列 |
+| `cmd/scheduler/` | 從 Google 試算表 CSV 讀取關鍵字，依 `SCRAPE_INTERVAL` 推入 Redis 任務隊列 |
+| `shared/sheets/` | Google 試算表 CSV 匯出下載與關鍵字解析 |
 | `cmd/scraper/` | 啟動 Playwright 瀏覽器與 Worker，領取任務並爬取 |
 | `cmd/storage/` | 從 Redis 商品隊列取批、去重、寫入 MongoDB 並廣播新商品 |
 | `data/` | 本地開發用資料目錄 |
@@ -110,12 +114,22 @@ product-monitor/
 | `DISCORD_ALERT_WEBHOOK_URL` | `slog` Warn/Error 告警 Webhook；未設定則沿用 `DISCORD_WEBHOOK_URL` | — |
 | `DISCORD_WEBHOOK_URL` | 新商品 Discord Webhook；多個以逗號分隔，**每個商品** round-robin 輪詢 | — |
 | `DISCORD_WEBHOOK_URLS` | 同上，可與 `DISCORD_WEBHOOK_URL` 並用（合併去重） | — |
-| `KEYWORDS` | 監控關鍵字，逗號分隔 | — |
+| `GOOGLE_SHEET_CSV_URL` | 試算表 CSV 匯出網址或一般連結（Scheduler 關鍵字來源） | — |
+| `GOOGLE_SHEETS_ID` | 試算表 ID（與 `GOOGLE_SHEETS_GID` 組匯出 URL，擇一於上者） | — |
+| `GOOGLE_SHEETS_GID` | 工作表 gid | `0` |
+| `KEYWORDS` | 後備：未設定試算表時，逗號分隔關鍵字（價格 0–95000） | — |
 | `MONGO_URI` | MongoDB 連線字串 | `mongodb://localhost:27017` |
 | `NOTIFY_DISCORD_BATCH_INTERVAL` | 自佇列收到第一筆起，最長等待多久即送出（與筆數上限擇一觸發） | `5s` |
 | `NOTIFY_DISCORD_BATCH_SIZE` | 單次 webhook 最多幾則商品 embed（Discord 上限 10） | `10` |
 | `REDIS_ADDR` | Redis 位址 | `localhost:6379` |
 | `SCRAPE_INTERVAL` | Scheduler 派發間隔（如 `3m`、`5m`） | `3m` |
+
+### Google 試算表設定（Scheduler 關鍵字）
+
+1. 建立試算表：第一列標題 `keyword` | `price_start` | `price_end`（A/B/C 欄），以下每列一組搜尋條件。
+2. **共用** → **知道連結的使用者均可檢視**（CSV 匯出才能免金鑰下載）。
+3. 在 `.env` 設定 `GOOGLE_SHEET_CSV_URL`（貼試算表網址或匯出網址皆可），或設定 `GOOGLE_SHEETS_ID` + `GOOGLE_SHEETS_GID`。
+4. CSV 匯出格式：`https://docs.google.com/spreadsheets/d/{ID}/export?format=csv&gid={GID}`
 
 ## 快速開始
 

@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"product-monitor/shared/sheets"
 )
 
 // Config 存放全域共用設定
@@ -17,8 +19,13 @@ type Config struct {
 	MongoColl string
 
 	// 爬蟲相關
-	Keywords       []string
+	Keywords       []string // KEYWORDS 後備（未設定 Google 試算表時）
 	ScrapeInterval time.Duration
+
+	// Google 試算表（Scheduler 關鍵字來源，CSV 匯出免 API 金鑰）
+	GoogleSheetCSVURL string // GOOGLE_SHEET_CSV_URL：完整 CSV 匯出網址或一般試算表連結
+	GoogleSheetsID    string // GOOGLE_SHEETS_ID：與 GOOGLE_SHEETS_GID 組匯出 URL
+	GoogleSheetsGID   string
 
 	// 通知相關
 	DiscordWebhookURLs     []string // 新商品通知（DISCORD_WEBHOOK_URL / DISCORD_WEBHOOK_URLS，逗號分隔，輪詢發送）
@@ -79,6 +86,10 @@ func Load() *Config {
 		batchInterval = 500 * time.Millisecond
 	}
 
+	sheetURL := getEnv("GOOGLE_SHEET_CSV_URL", "")
+	sheetsID := getEnv("GOOGLE_SHEETS_ID", "")
+	sheetsGID := getEnv("GOOGLE_SHEETS_GID", "0")
+
 	return &Config{
 		RedisAddr:                  getEnv("REDIS_ADDR", "localhost:6379"),
 		MongoURI:                   getEnv("MONGO_URI", "mongodb://localhost:27017"),
@@ -86,12 +97,23 @@ func Load() *Config {
 		MongoColl:                  getEnv("MONGO_COLLECTION", "products"),
 		Keywords:                   keywords,
 		ScrapeInterval:             interval,
+		GoogleSheetCSVURL: sheetURL,
+		GoogleSheetsID:    sheetsID,
+		GoogleSheetsGID:   sheetsGID,
 		DiscordWebhookURLs:         loadDiscordWebhookURLs(),
 		DiscordAlertWebhookURL:     getEnv("DISCORD_ALERT_WEBHOOK_URL", ""),
 		DiscordNotifyBatchSize:     batchSize,
 		DiscordNotifyBatchInterval: batchInterval,
 		AppMode:                    getEnv("APP_MODE", "prod"),
 	}
+}
+
+// GoogleSheetExportURL 回傳 Scheduler 用來下載關鍵字的 CSV 匯出網址。
+func (c *Config) GoogleSheetExportURL() string {
+	if u := strings.TrimSpace(c.GoogleSheetCSVURL); u != "" {
+		return sheets.NormalizeSheetURL(u)
+	}
+	return sheets.BuildExportURL(c.GoogleSheetsID, c.GoogleSheetsGID)
 }
 
 // getEnv 封裝讀取環境變數的邏輯，支援預設值
