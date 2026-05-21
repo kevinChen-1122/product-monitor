@@ -2,17 +2,35 @@
 ## 架構流程
 
 ```
-Scheduler ──推送關鍵字──▶ Redis 任務隊列
-                              │
-Scraper ◀──領取任務────────────┘
-   │
-   └──推送商品批次──▶ Redis 商品隊列
-                          │
-Storage ◀──領取批次────────┘
-   ├── Redis 去重
-   ├── MongoDB 持久化
-   └── Redis List `queue:notifier` ──▶ Notifier ──▶ Discord（新商品）
+Scheduler（定時 SCRAPE_INTERVAL）
+    │
+    ▼
+上一輪完成？（scraper:tasks 為空 且 scraper:inflight 不存在）
+    │
+    ├── 是 ──▶ LPUSH 全部 KEYWORDS ──▶ Redis: scraper:tasks
+    │                                      │
+    │                                      ▼ BRPop
+    │                                 Scraper
+    │                                 Set inflight → 爬取 Carousell → Clear inflight
+    │                                      │
+    │                                      ▼ LPUSH 商品批次
+    │                                 Redis: queue:products
+    │                                      │
+    │                                      ▼ BRPop
+    │                                 Storage
+    │                                 SetNX 去重 (seen:{id}) → MongoDB 持久化
+    │                                 新商品 ──▶ Redis: queue:notifier
+    │                                      │
+    │                                      ▼
+    │                                 Notifier（批次累積 → Webhook 輪詢）
+    │                                      │
+    │                                      ▼
+    │                                 Discord 新商品通知
+    │
+    └── 否 ──▶ 略過派發 ──▶ Discord 告警（DISCORD_ALERT_WEBHOOK_URL）
 ```
+
+**上一輪完成條件**：`scraper:tasks` 為空，且 `scraper:inflight` 不存在（爬蟲異常時 inflight 30 分鐘後過期）。
 
 ## 目錄結構
 

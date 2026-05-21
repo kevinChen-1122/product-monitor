@@ -31,7 +31,7 @@ func main() {
 	defer ticker.Stop()
 
 	// 啟動時先立刻派發第一次
-	dispatch(ctx, rdb, cfg.Keywords)
+	dispatch(ctx, rdb, cfg)
 
 	for {
 		select {
@@ -39,12 +39,39 @@ func main() {
 			slog.Info("[Scheduler] 接收到停機訊號，停止派發")
 			return
 		case <-ticker.C:
-			dispatch(ctx, rdb, cfg.Keywords)
+			dispatch(ctx, rdb, cfg)
 		}
 	}
 }
 
-func dispatch(ctx context.Context, rdb *store.RedisStore, keywords []string) {
+func dispatch(ctx context.Context, rdb *store.RedisStore, cfg *config.Config) {
+	keywords := cfg.Keywords
+
+	queueLen, inflight, busy, err := rdb.ScrapeRoundStatus(ctx)
+	if err != nil {
+		slog.Error("[Scheduler] 無法檢查爬蟲輪次狀態",
+			"err_msg", err,
+		)
+		return
+	}
+	if busy {
+		attrs := []any{
+			"queue_pending", queueLen,
+			"scrape_interval", cfg.ScrapeInterval.String(),
+		}
+		if inflight != "" {
+			attrs = append(attrs, "inflight_keyword", inflight)
+		}
+		// logging.Setup 已將 Warn 轉發至 DISCORD_ALERT_WEBHOOK_URL
+		slog.Warn("[Scheduler] 上一輪爬蟲尚未完成，略過本次關鍵字派發", attrs...)
+		return
+	}
+
+	if len(keywords) == 0 {
+		slog.Warn("[Scheduler] 未設定 KEYWORDS，略過派發")
+		return
+	}
+
 	slog.Info("[Scheduler] 定時觸發，正在向 Redis 隊列派發關鍵字",
 		"keyword_count", len(keywords),
 		"keywords", keywords,

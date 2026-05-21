@@ -50,11 +50,25 @@ func (w *ScraperWorker) Start(ctx context.Context) {
 				continue
 			}
 
+			if err := w.redisStore.SetScrapeInflight(ctx, keyword); err != nil {
+				slog.Warn("[Scraper Worker] 無法標記進行中關鍵字",
+					"keyword", keyword,
+					"err_msg", err,
+				)
+			}
+
 			slog.Debug("[Scraper Worker] 領取到監控任務關鍵字，準備執行爬取...",
 				"keyword", keyword,
 			)
 
 			products, err := w.scrapeWithSelfHealing(keyword)
+			if clearErr := w.redisStore.ClearScrapeInflight(ctx); clearErr != nil {
+				slog.Warn("[Scraper Worker] 無法清除進行中標記",
+					"keyword", keyword,
+					"err_msg", clearErr,
+				)
+			}
+
 			if err != nil {
 				slog.Error("[Scraper Worker] 爬取關鍵字失敗",
 					"keyword", keyword,

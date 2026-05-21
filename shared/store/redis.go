@@ -9,6 +9,13 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+const (
+	scraperTasksKey    = "scraper:tasks"
+	scraperInflightKey = "scraper:inflight"
+	// 爬蟲異常退出時，inflight 逾時後 Scheduler 才能再次派發
+	scraperInflightTTL = 30 * time.Minute
+)
+
 type RedisStore struct {
 	Client *redis.Client
 }
@@ -23,16 +30,45 @@ func NewRedisStore(addr string) *RedisStore {
 
 // PushTask 將關鍵字推入 List
 func (r *RedisStore) PushTask(ctx context.Context, kw string) error {
-	return r.Client.LPush(ctx, "scraper:tasks", kw).Err()
+	return r.Client.LPush(ctx, scraperTasksKey, kw).Err()
 }
 
 // PopTask 從 List 領取任務 (阻塞)
 func (r *RedisStore) PopTask(ctx context.Context) (string, error) {
-	res, err := r.Client.BRPop(ctx, 0, "scraper:tasks").Result()
+	res, err := r.Client.BRPop(ctx, 0, scraperTasksKey).Result()
 	if err != nil {
 		return "", err
 	}
 	return res[1], nil
+}
+
+// ScrapeRoundStatus 回傳本輪是否仍在進行（隊列尚有任務或爬蟲正在處理某一關鍵字）
+func (r *RedisStore) ScrapeRoundStatus(ctx context.Context) (queueLen int64, inflight string, busy bool, err error) {
+	queueLen, err = r.Client.LLen(ctx, scraperTasksKey).Result()
+	if err != nil {
+		return 0, "", false, err
+	}
+
+	inflight, err = r.Client.Get(ctx, scraperInflightKey).Result()
+	if err == redis.Nil {
+		inflight = ""
+		err = nil
+	} else if err != nil {
+		return queueLen, "", false, err
+	}
+
+	busy = queueLen > 0 || inflight != ""
+	return queueLen, inflight, busy, nil
+}
+
+// SetScrapeInflight 標記爬蟲正在處理的關鍵字（已從隊列 Pop 出來）
+func (r *RedisStore) SetScrapeInflight(ctx context.Context, keyword string) error {
+	return r.Client.Set(ctx, scraperInflightKey, keyword, scraperInflightTTL).Err()
+}
+
+// ClearScrapeInflight 清除進行中標記（單一關鍵字爬取結束後呼叫）
+func (r *RedisStore) ClearScrapeInflight(ctx context.Context) error {
+	return r.Client.Del(ctx, scraperInflightKey).Err()
 }
 
 // IsNew 使用 Redis SetNX 檢查商品是否已存在
