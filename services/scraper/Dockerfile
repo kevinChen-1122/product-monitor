@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y git
 
 # 複製依賴文件並下載
 COPY go.mod go.sum ./
+ENV GOPROXY=direct
 RUN go mod download
 COPY . .
 
