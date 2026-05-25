@@ -62,7 +62,7 @@ func (w *ScraperWorker) Start(ctx context.Context) {
 				"price_end", task.PriceEnd,
 			)
 
-			products, err := w.scrapeWithSelfHealing(task)
+			products, err := w.scrapeWithSelfHealing(ctx, task)
 			if clearErr := w.redisStore.ClearScrapeInflight(ctx); clearErr != nil {
 				slog.Warn("[Scraper Worker] 無法清除進行中標記",
 					"keyword", task.Keyword,
@@ -103,10 +103,10 @@ func (w *ScraperWorker) Start(ctx context.Context) {
 const scrapeMaxAttempts = 3
 
 // scrapeWithSelfHealing 執行爬取；遇瀏覽器連線中斷時重啟 Playwright 並重試
-func (w *ScraperWorker) scrapeWithSelfHealing(task models.SearchTask) ([]models.Product, error) {
+func (w *ScraperWorker) scrapeWithSelfHealing(ctx context.Context, task models.SearchTask) ([]models.Product, error) {
 	var lastErr error
 	for attempt := 1; attempt <= scrapeMaxAttempts; attempt++ {
-		products, err := w.scrapeOnce(task)
+		products, err := w.scrapeOnce(ctx, task)
 		if err == nil {
 			return products, nil
 		}
@@ -127,7 +127,7 @@ func (w *ScraperWorker) scrapeWithSelfHealing(task models.SearchTask) ([]models.
 	return nil, lastErr
 }
 
-func (w *ScraperWorker) scrapeOnce(task models.SearchTask) ([]models.Product, error) {
+func (w *ScraperWorker) scrapeOnce(ctx context.Context, task models.SearchTask) ([]models.Product, error) {
 	if err := w.browserManager.EnsureBrowserAlive(); err != nil {
 		return nil, fmt.Errorf("瀏覽器自癒檢查失敗: %w", err)
 	}
@@ -159,7 +159,7 @@ func (w *ScraperWorker) scrapeOnce(task models.SearchTask) ([]models.Product, er
 		return nil, fmt.Errorf("頁面載入失敗: %w", err)
 	}
 
-	products, err := parser.ParseListings(page)
+	products, err := parser.ParseListings(ctx, page)
 	if err != nil {
 		return nil, fmt.Errorf("解析商品卡片失敗: %w", err)
 	}

@@ -14,6 +14,8 @@ const (
 	maxRetries          = 2
 )
 
+var httpClient = &http.Client{Timeout: 10 * time.Second}
+
 // Embed 定義 (對應 Discord 的結構)
 type Embed struct {
 	Title       string  `json:"title,omitempty"`
@@ -80,8 +82,7 @@ func sendPayloadWithRetries(webhookURL string, embeds []Embed) error {
 		}
 		req.Header.Set("Content-Type", "application/json")
 
-		client := &http.Client{Timeout: 10 * time.Second}
-		resp, err := client.Do(req)
+		resp, err := httpClient.Do(req)
 
 		// 處理網路錯誤或請求失敗
 		if err != nil {

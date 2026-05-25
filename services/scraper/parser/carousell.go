@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
@@ -10,9 +11,13 @@ import (
 	"product-monitor/shared/models"
 )
 
-func ParseListings(page playwright.Page) ([]models.Product, error) {
+func ParseListings(ctx context.Context, page playwright.Page) ([]models.Product, error) {
 	// 稍微等待確保動態內容與廣告加載完成
-	time.Sleep(3 * time.Second)
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(3 * time.Second):
+	}
 
 	// 定位所有商品卡片容器
 	items, err := page.QuerySelectorAll("[data-testid^='listing-card-']")

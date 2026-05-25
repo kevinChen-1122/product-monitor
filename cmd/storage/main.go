@@ -20,11 +20,16 @@ func main() {
 	slog.Info("[Storage] 服務正在啟動...")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancelHandle(cancel)
+	go cancelHandle(cancel)
 
 	// 需要連 Redis 和 MongoDB
 	rdb := store.NewRedisStore(cfg.RedisAddr)
 	db := store.NewMongoStore(cfg.MongoURI, cfg.MongoDB, cfg.MongoColl)
+	defer func() {
+		if err := db.Close(context.Background()); err != nil {
+			slog.Warn("[Storage] 關閉 MongoDB 連線失敗", "err_msg", err)
+		}
+	}()
 	slog.Info("[Storage] 資料庫連線完全就緒，開始監聽商品儲存隊列...")
 
 	// 進入死迴圈，持續異步消化商品資料

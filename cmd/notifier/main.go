@@ -38,7 +38,7 @@ func main() {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancelHandle(cancel)
+	go cancelHandle(cancel)
 
 	rdb := store.NewRedisStore(cfg.RedisAddr)
 	slog.Info("[Notifier] 開始監聽 Redis 通知隊列 [queue:notifier]...")

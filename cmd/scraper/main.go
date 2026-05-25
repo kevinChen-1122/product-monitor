@@ -21,7 +21,7 @@ func main() {
 	slog.Info("[Scraper] 服務初始化啟動中...")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancelHandle(cancel)
+	go cancelHandle(cancel)
 
 	// 初始化 Redis 儲存庫
 	rdb := store.NewRedisStore(cfg.RedisAddr)
@@ -32,6 +32,7 @@ func main() {
 		slog.Error("[Scraper] 啟動瀏覽器管理器失敗",
 			"err_msg", err,
 		)
+		os.Exit(1)
 	}
 	defer bm.Close()
 

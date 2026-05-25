@@ -9,7 +9,8 @@ import (
 )
 
 type MongoStore struct {
-	Col *mongo.Collection
+	client *mongo.Client
+	Col    *mongo.Collection
 }
 
 func NewMongoStore(uri string, dbName string, collection string) *MongoStore {
@@ -27,7 +28,12 @@ func NewMongoStore(uri string, dbName string, collection string) *MongoStore {
 	}
 
 	col := client.Database(dbName).Collection(collection)
-	return &MongoStore{Col: col}
+	return &MongoStore{client: client, Col: col}
+}
+
+// Close 斷開 MongoDB 連線並釋放連線池
+func (m *MongoStore) Close(ctx context.Context) error {
+	return m.client.Disconnect(ctx)
 }
 
 // SaveProduct 儲存商品

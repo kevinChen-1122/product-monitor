@@ -24,7 +24,7 @@ func main() {
 	slog.Info("[Scheduler] 服務正在啟動...")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancelHandle(cancel)
+	go cancelHandle(cancel)
 
 	// 只需要連 Redis
 	rdb := store.NewRedisStore(cfg.RedisAddr)
