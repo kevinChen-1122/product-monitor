@@ -22,6 +22,7 @@ services:
     build:
       context: .
       dockerfile: ./services/scraper/Dockerfile
+      network: host
     container_name: pm-scraper
     depends_on:
       - redis
@@ -44,7 +45,8 @@ services:
   scheduler:
     build:
       context: .
-      dockerfile: Dockerfile.base # 可以共用一個基礎 Go Dockerfile
+      dockerfile: Dockerfile.base
+      network: host
     command: ["/app/bin/scheduler"] # 執行編譯出來的 scheduler 二進位檔
     environment:
       - TZ=Asia/Taipei
@@ -63,7 +65,8 @@ services:
   storage:
     build:
       context: .
-      dockerfile: Dockerfile.base # 一樣共用基礎 Go Dockerfile 即可
+      dockerfile: Dockerfile.base
+      network: host
     command: [ "/app/bin/storage" ]
     environment:
       - TZ=Asia/Taipei
@@ -84,6 +87,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.base
+      network: host
     container_name: pm-notifier
     command: [ "/app/bin/notifier" ]
     env_file:
