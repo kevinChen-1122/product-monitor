@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"product-monitor/shared/netutil"
 )
 
 // Discord 規範：Webhook 單次請求最多只能帶 10 個 Embeds
@@ -14,7 +16,7 @@ const (
 	maxRetries          = 2
 )
 
-var httpClient = &http.Client{Timeout: 10 * time.Second}
+var httpClient = netutil.IPv4Client
 
 // Embed 定義 (對應 Discord 的結構)
 type Embed struct {

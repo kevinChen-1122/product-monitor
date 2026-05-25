@@ -8,11 +8,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 	"unicode"
-)
 
-const fetchTimeout = 30 * time.Second
+	"product-monitor/shared/netutil"
+)
 
 // FetchKeywords 從 Google 試算表 CSV 匯出 URL 讀取關鍵字（免 API 金鑰）。
 // column 可為欄位索引（0 起算）或標題列名稱（不分大小寫）。
@@ -26,8 +25,7 @@ func FetchKeywords(ctx context.Context, csvURL, column string) ([]string, error)
 		return nil, fmt.Errorf("建立請求失敗: %w", err)
 	}
 
-	client := &http.Client{Timeout: fetchTimeout}
-	resp, err := client.Do(req)
+	resp, err := netutil.IPv4Client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("下載試算表 CSV 失敗: %w", err)
 	}

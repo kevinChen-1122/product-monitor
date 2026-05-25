@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"product-monitor/shared/models"
+	"product-monitor/shared/netutil"
 )
 
 const (
@@ -34,8 +35,7 @@ func FetchSearchTasks(ctx context.Context, csvURL string) ([]models.SearchTask, 
 		return nil, fmt.Errorf("建立請求失敗: %w", err)
 	}
 
-	client := &http.Client{Timeout: fetchTimeout}
-	resp, err := client.Do(req)
+	resp, err := netutil.IPv4Client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("下載試算表 CSV 失敗: %w", err)
 	}
