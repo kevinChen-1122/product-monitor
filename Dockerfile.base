@@ -8,7 +8,6 @@ WORKDIR /app
 
 # 複製 Go 依賴設定並下載
 COPY go.mod go.sum ./
-ENV GOPROXY=direct
 RUN go mod download
 
 # 複製整個專案原始碼
