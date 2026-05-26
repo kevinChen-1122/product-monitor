@@ -17,7 +17,12 @@ const (
 	scraperInflightKey = "scraper:inflight"
 	// 爬蟲異常退出時，inflight 逾時後 Scheduler 才能再次派發
 	scraperInflightTTL = 30 * time.Minute
+	// popTimeout：BRPop 等待新任務的最長時間，超時代表隊列清空（輪次結束）
+	popTimeout = 5 * time.Second
 )
+
+// ErrQueueEmpty 代表隊列暫時無任務（BRPop 正常超時，非 Redis 連線錯誤）
+var ErrQueueEmpty = fmt.Errorf("隊列暫時無任務")
 
 type RedisStore struct {
 	Client *redis.Client
@@ -45,9 +50,13 @@ func (r *RedisStore) PushTask(ctx context.Context, task models.SearchTask) error
 	return r.Client.LPush(ctx, scraperTasksKey, data).Err()
 }
 
-// PopTask 從 List 領取任務 (阻塞)
+// PopTask 從 List 領取任務 (最多阻塞 popTimeout)
+// 隊列為空時返回 ErrQueueEmpty，Redis 連線錯誤時返回其他 error。
 func (r *RedisStore) PopTask(ctx context.Context) (models.SearchTask, error) {
-	res, err := r.Client.BRPop(ctx, 0, scraperTasksKey).Result()
+	res, err := r.Client.BRPop(ctx, popTimeout, scraperTasksKey).Result()
+	if err == redis.Nil {
+		return models.SearchTask{}, ErrQueueEmpty
+	}
 	if err != nil {
 		return models.SearchTask{}, err
 	}

@@ -2,6 +2,7 @@ package scraper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -14,8 +15,8 @@ import (
 	"product-monitor/shared/store"
 )
 
-// browserRestartInterval 每爬取這麼多頁就主動重啟 Chromium，防止記憶體長期累積。
-// 設為略低於關鍵字總數，確保每輪結束後都能重置。
+// browserRestartInterval 每完成這麼多頁後，在下一個輪次空窗期主動重啟 Chromium。
+// 重啟發生在隊列清空時（inflight="" 且 queueLen=0），不影響 Scheduler 派送。
 const browserRestartInterval = 40
 
 // ScraperWorker 負責從 Redis 領取任務並調配瀏覽器執行爬取的 Worker 結構
@@ -23,7 +24,7 @@ type ScraperWorker struct {
 	cfg            *config.Config
 	redisStore     *store.RedisStore
 	browserManager *engine.BrowserManager
-	pagesScraped   int // 累計成功爬取頁數，用於觸發主動重啟
+	pagesScraped   int // 累計爬取頁數，用於觸發輪次結束後的主動重啟
 }
 
 // NewScraperWorker 建立並初始化 Worker 實體
@@ -47,9 +48,24 @@ func (w *ScraperWorker) Start(ctx context.Context) {
 		default:
 			task, err := w.redisStore.PopTask(ctx)
 			if err != nil {
-				slog.Warn("[Scraper Worker] 領取任務暫時中斷 (可能正在等待任務)",
-					"err_msg", err,
-				)
+				if !errors.Is(err, store.ErrQueueEmpty) {
+					slog.Warn("[Scraper Worker] 領取任務暫時中斷 (可能正在等待任務)",
+						"err_msg", err,
+					)
+				}
+				// 隊列清空（輪次結束）才執行定期重啟：此時 inflight="" 且 queueLen=0，
+				// Scheduler 不會誤判為輪次進行中，可正常派送下一輪。
+				if w.pagesScraped >= browserRestartInterval {
+					w.pagesScraped = 0
+					slog.Info("[Scraper Worker] 輪次結束，定期重啟瀏覽器以釋放記憶體",
+						"pages_since_last_restart", browserRestartInterval,
+					)
+					if restartErr := w.browserManager.Recover(); restartErr != nil {
+						slog.Warn("[Scraper Worker] 定期重啟瀏覽器失敗",
+							"err_msg", restartErr,
+						)
+					}
+				}
 				time.Sleep(2 * time.Second)
 				continue
 			}
@@ -74,6 +90,7 @@ func (w *ScraperWorker) Start(ctx context.Context) {
 					"err_msg", clearErr,
 				)
 			}
+			w.pagesScraped++ // 無論成功或失敗，瀏覽器都消耗了資源
 
 			if err != nil {
 				slog.Error("[Scraper Worker] 爬取關鍵字失敗",
@@ -102,19 +119,6 @@ func (w *ScraperWorker) Start(ctx context.Context) {
 				)
 			}
 
-			// 主動定期重啟瀏覽器，防止 Chromium 記憶體長期累積拖慢速度
-			w.pagesScraped++
-			if w.pagesScraped >= browserRestartInterval {
-				w.pagesScraped = 0
-				slog.Info("[Scraper Worker] 定期重啟瀏覽器以釋放記憶體",
-					"pages_since_last_restart", browserRestartInterval,
-				)
-				if restartErr := w.browserManager.Recover(); restartErr != nil {
-					slog.Warn("[Scraper Worker] 定期重啟瀏覽器失敗",
-						"err_msg", restartErr,
-					)
-				}
-			}
 		}
 	}
 }
