@@ -192,6 +192,11 @@ func InitBrowser(pw *playwright.Playwright, headless bool) (playwright.Browser, 
 			"--js-flags=--max-old-space-size=512",
 			"--disable-ipv6",
 			"--enable-features=DnsOverHttps",
+			// 關閉磁碟 cache，避免 network service 長期佔用記憶體與磁碟
+			"--disk-cache-size=0",
+			"--media-cache-size=0",
+			// 限制記憶體壓力，讓 Chromium 更積極回收資源
+			"--enable-low-end-device-mode",
 		},
 	})
 }

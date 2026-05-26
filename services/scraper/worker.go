@@ -14,11 +14,16 @@ import (
 	"product-monitor/shared/store"
 )
 
+// browserRestartInterval 每爬取這麼多頁就主動重啟 Chromium，防止記憶體長期累積。
+// 設為略低於關鍵字總數，確保每輪結束後都能重置。
+const browserRestartInterval = 40
+
 // ScraperWorker 負責從 Redis 領取任務並調配瀏覽器執行爬取的 Worker 結構
 type ScraperWorker struct {
 	cfg            *config.Config
 	redisStore     *store.RedisStore
 	browserManager *engine.BrowserManager
+	pagesScraped   int // 累計成功爬取頁數，用於觸發主動重啟
 }
 
 // NewScraperWorker 建立並初始化 Worker 實體
@@ -95,6 +100,20 @@ func (w *ScraperWorker) Start(ctx context.Context) {
 				slog.Debug("[Scraper Worker] 關鍵字爬取完畢，但未發現符合條件的全新商品",
 					"keyword", task.Keyword,
 				)
+			}
+
+			// 主動定期重啟瀏覽器，防止 Chromium 記憶體長期累積拖慢速度
+			w.pagesScraped++
+			if w.pagesScraped >= browserRestartInterval {
+				w.pagesScraped = 0
+				slog.Info("[Scraper Worker] 定期重啟瀏覽器以釋放記憶體",
+					"pages_since_last_restart", browserRestartInterval,
+				)
+				if restartErr := w.browserManager.Recover(); restartErr != nil {
+					slog.Warn("[Scraper Worker] 定期重啟瀏覽器失敗",
+						"err_msg", restartErr,
+					)
+				}
 			}
 		}
 	}
