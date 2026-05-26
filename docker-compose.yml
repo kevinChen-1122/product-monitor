@@ -27,6 +27,8 @@ services:
     dns:
       - 8.8.8.8
       - 1.1.1.1
+    dns_opt:
+      - use-vc
     depends_on:
       - redis
       - mongodb
@@ -58,10 +60,12 @@ services:
     dns:
       - 8.8.8.8
       - 1.1.1.1
+    dns_opt:
+      - use-vc
     depends_on:
       - redis
     env_file: .env
-    restart: always # ˋ暫時自動重啟，未來可能會因應修改觸發方式調整
+    restart: always
     logging:
       driver: "json-file"
       options:
@@ -104,13 +108,15 @@ services:
     dns:
       - 8.8.8.8
       - 1.1.1.1
+    dns_opt:
+      - use-vc
     depends_on:
       - redis
     restart: always
     logging:
       driver: "json-file"
       options:
-        max-size: "10m"   # 每個日誌檔案最大 10MB
+        max-size: "10m"
         max-file: "3"
 
 volumes:
