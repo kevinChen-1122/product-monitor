@@ -37,7 +37,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 8G
+          memory: 3G
     restart: always
     logging:
       driver: "json-file"
