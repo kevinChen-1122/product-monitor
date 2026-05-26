@@ -24,6 +24,9 @@ services:
       dockerfile: ./services/scraper/Dockerfile
       network: host
     container_name: pm-scraper
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     depends_on:
       - redis
       - mongodb
@@ -47,11 +50,14 @@ services:
       context: .
       dockerfile: Dockerfile.base
       network: host
-    command: ["/app/bin/scheduler"] # 執行編譯出來的 scheduler 二進位檔
+    command: ["/app/bin/scheduler"]
     environment:
       - TZ=Asia/Taipei
       - REDIS_ADDR=redis:6379
     container_name: pm-scheduler
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     depends_on:
       - redis
     env_file: .env
@@ -95,6 +101,9 @@ services:
     environment:
       - TZ=Asia/Taipei
       - REDIS_ADDR=redis:6379
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     depends_on:
       - redis
     restart: always

@@ -20,7 +20,7 @@ ENV PATH=/usr/local/go/bin:$PATH
 ENV GOPATH=/root/go
 
 # 複製模組快取，避免重新下載 Go 依賴
-COPY --from=builder /root/go/pkg/mod /root/go/pkg/mod
+COPY --from=builder /go/pkg/mod /root/go/pkg/mod
 WORKDIR /app
 COPY go.mod go.sum ./
 COPY . .

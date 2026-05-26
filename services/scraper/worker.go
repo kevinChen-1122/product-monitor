@@ -152,8 +152,21 @@ func (w *ScraperWorker) scrapeOnce(ctx context.Context, task models.SearchTask) 
 		"target_url", targetURL,
 	)
 
+	// 封鎖圖片、字型、CSS：讓瀏覽器只跑 JS，顯著降低超時機率
+	if err = page.Route("**/*", func(route playwright.Route) {
+		switch route.Request().ResourceType() {
+		case "image", "media", "font", "stylesheet":
+			route.Abort()
+		default:
+			route.Continue()
+		}
+	}); err != nil {
+		return nil, fmt.Errorf("設定資源封鎖失敗: %w", err)
+	}
+
+	// commit：server 回應一開始即觸發，不等 HTML 解析完畢
 	if _, err = page.Goto(targetURL, playwright.PageGotoOptions{
-		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
+		WaitUntil: playwright.WaitUntilStateCommit,
 		Timeout:   playwright.Float(20000),
 	}); err != nil {
 		return nil, fmt.Errorf("頁面載入失敗: %w", err)

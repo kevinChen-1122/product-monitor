@@ -5,18 +5,27 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"time"
 
 	playwright "github.com/playwright-community/playwright-go"
 	"product-monitor/shared/models"
 )
 
 func ParseListings(ctx context.Context, page playwright.Page) ([]models.Product, error) {
-	// 稍微等待確保動態內容與廣告加載完成
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-time.After(3 * time.Second):
+	// 等商品卡片真正出現，比 sleep 精準：快時 <1s，慢時自動多等
+	if _, err := page.WaitForSelector("[data-testid^='listing-card-']",
+		playwright.PageWaitForSelectorOptions{
+			Timeout: playwright.Float(15000),
+		},
+	); err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		// 檢查是否被 redirect（遭封鎖/需登入）：URL 偏離搜尋路徑才報錯
+		if currentURL := page.URL(); !strings.Contains(currentURL, "/search/") {
+			return nil, fmt.Errorf("頁面被重新導向至 %s，可能遭封鎖或需要登入", currentURL)
+		}
+		// URL 正確但無商品卡片 → 搜尋結果為空，正常略過
+		return nil, nil
 	}
 
 	// 定位所有商品卡片容器

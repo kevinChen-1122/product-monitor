@@ -190,6 +190,7 @@ func InitBrowser(pw *playwright.Playwright, headless bool) (playwright.Browser, 
 			"--disable-blink-features=AutomationControlled",
 			"--no-sandbox",
 			"--js-flags=--max-old-space-size=512",
+			"--disable-ipv6",
 		},
 	})
 }
