@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	playwright "github.com/playwright-community/playwright-go"
@@ -175,14 +176,19 @@ func (w *ScraperWorker) scrapeOnce(ctx context.Context, task models.SearchTask) 
 		"target_url", targetURL,
 	)
 
-	// 封鎖圖片、字型、CSS：讓瀏覽器只跑 JS，顯著降低超時機率
+	// 封鎖靜態資源與第三方追蹤腳本：減少 DNS 查詢次數，降低超時機率
 	if err = page.Route("**/*", func(route playwright.Route) {
-		switch route.Request().ResourceType() {
+		req := route.Request()
+		switch req.ResourceType() {
 		case "image", "media", "font", "stylesheet":
 			route.Abort()
-		default:
-			route.Continue()
+			return
 		}
+		if isTrackerURL(req.URL()) {
+			route.Abort()
+			return
+		}
+		route.Continue()
 	}); err != nil {
 		return nil, fmt.Errorf("設定資源封鎖失敗: %w", err)
 	}
@@ -200,4 +206,41 @@ func (w *ScraperWorker) scrapeOnce(ctx context.Context, task models.SearchTask) 
 		return nil, fmt.Errorf("解析商品卡片失敗: %w", err)
 	}
 	return products, nil
+}
+
+// trackerDomains 是第三方追蹤、廣告與監控腳本的網域片段清單。
+// 只要請求 URL 包含其中任一片段即封鎖，避免 Chromium 發出多餘的 DNS 查詢。
+var trackerDomains = []string{
+	// 分析
+	"google-analytics.com",
+	"googletagmanager.com",
+	"googlesyndication.com",
+	"doubleclick.net",
+	"amplitude.com",
+	"mixpanel.com",
+	"segment.com",
+	"hotjar.com",
+	"newrelic.com",
+	"datadoghq.com",
+	// 廣告 / 再行銷
+	"connect.facebook.net",
+	"criteo.com",
+	"crto.com",
+	"adnxs.com",
+	"bat.bing.com",
+	"appsflyer.com",
+	"adjust.com",
+	"branch.io",
+	// 錯誤追蹤
+	"sentry.io",
+	"bugsnag.com",
+}
+
+func isTrackerURL(rawURL string) bool {
+	for _, domain := range trackerDomains {
+		if strings.Contains(rawURL, domain) {
+			return true
+		}
+	}
+	return false
 }
