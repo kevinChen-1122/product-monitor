@@ -191,7 +191,10 @@ func InitBrowser(pw *playwright.Playwright, headless bool) (playwright.Browser, 
 			"--no-sandbox",
 			"--js-flags=--max-old-space-size=512",
 			"--disable-ipv6",
-			"--enable-features=DnsOverHttps",
+			// 強制 Chromium 使用 DoH，完全跳過容器 UDP DNS resolver
+			// 直接連 8.8.8.8:443（IP，不需要 DNS 解析），不依賴系統 resolv.conf
+			"--dns-over-https-mode=secure",
+			"--dns-over-https-templates=https://8.8.8.8/dns-query{?dns}",
 		},
 	})
 }
